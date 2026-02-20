@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vision-rag"
+version = "0.1.1"
+description = "Video RAG — a Python library for retrieval-augmented generation over video"
+requires-python = ">=3.9"
+dependencies = [
+    "pymediainfo",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vision_rag*"]

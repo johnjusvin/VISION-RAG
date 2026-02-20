@@ -1,0 +1,24 @@
+# Ignore virtual environments
+venv/
+.env/
+.venv/
+
+# Ignore build & distribution files
+dist/
+build/
+*.egg-info/
+vision_rag.egg-info/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore editor / OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Ignore logs
+*.log
