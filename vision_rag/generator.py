@@ -105,11 +105,21 @@ class BaseGenerator:
 
     def _build_system_prompt(self) -> str:
         return (
-            "You are a video understanding assistant. "
-            "You are given retrieved chunks from a video — each chunk has a transcript segment "
-            "and a keyframe image from that moment in the video. "
-            "Use both the text and visual information to answer the user's question accurately. "
-            "If the answer is not in the provided chunks, say so clearly."
+            "You are answering questions using Retrieval-Augmented Generation (RAG) over a video.\n\n"
+            "The chunks provided below were retrieved specifically because their transcript text "
+            "and/or keyframe image were the closest semantic match to the user's question, out of "
+            "the entire video. Treat the transcript text as the primary source of truth for what was "
+            "said or discussed. Treat the keyframe images as supporting visual context only — use them "
+            "when the question is specifically about what is visible on screen (appearance, actions, "
+            "setting, on-screen objects).\n\n"
+            "Rules:\n"
+            "1. If the question asks what someone said, discussed, or meant, answer from the transcript "
+            "text of the chunks, not the images.\n"
+            "2. If the question asks what is visually happening, answer from the keyframe images.\n"
+            "3. Never describe details in an image that are not clearly and unambiguously present. "
+            "Do not invent on-screen text, objects, or actions.\n"
+            "4. If the provided chunks do not contain the answer, say so directly instead of guessing.\n"
+            "5. Cite which chunk(s) (by timestamp) your answer is based on."
         )
 
 

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from vision_rag.video_chunker import Chunk
+from vision_rag._device import resolve_device
 
 
 # ──────────────────────────────────────────────────────────────
@@ -124,6 +125,60 @@ class BaseImageEmbedder:
 # Built-in Text Embedders
 # ──────────────────────────────────────────────────────────────
 
+class CLIPTextEmbedder(BaseTextEmbedder):
+    """
+    Text embeddings using OpenAI CLIP's text encoder. No API key needed.
+
+    IMPORTANT: pair this with CLIPImageEmbedder (same model= string) when
+    you need cross-modal retrieval -- i.e. text queries searching the
+    image index, or image-derived content ranked against text queries.
+    Text and image vectors only land in the same space when both come
+    from CLIP's joint encoder. Pairing CLIPImageEmbedder with an
+    unrelated text embedder (e.g. SentenceTransformerTextEmbedder)
+    produces vectors from two unconnected spaces -- searching the image
+    index with such a query is not meaningful even when the dimensions
+    happen to match, and Retriever will reject it outright when they don't.
+
+    Usage:
+        text_embedder  = CLIPTextEmbedder(model="ViT-B/32")                # auto device
+        text_embedder  = CLIPTextEmbedder(model="ViT-B/32", device="cuda")  # explicit
+
+    pip install git+https://github.com/openai/CLIP.git torch
+    """
+
+    def __init__(self, model: str = "ViT-B/32", device: str = "auto"):
+        self.model_name = model
+        self._requested_device = device
+        self.device: Optional[str] = None   # resolved lazily -- see _resolve_device()
+        self._model = None
+
+    def _resolve_device(self) -> str:
+        # Resolved lazily (not in __init__) so simply constructing this
+        # class never requires torch to be installed -- only embed() does.
+        if self.device is None:
+            self.device = resolve_device(self._requested_device)
+        return self.device
+
+    def embed(self, text: str) -> list[float]:
+        try:
+            import clip
+            import torch
+        except ImportError:
+            raise RuntimeError(
+                "pip install git+https://github.com/openai/CLIP.git torch"
+            )
+
+        device = self._resolve_device()
+
+        if self._model is None:
+            self._model, _ = clip.load(self.model_name, device=device)
+
+        tokens = clip.tokenize([text], truncate=True).to(device)
+        with torch.no_grad():
+            vector = self._model.encode_text(tokens)
+        return vector.squeeze().tolist()
+
+
 class OpenAITextEmbedder(BaseTextEmbedder):
     """
     OpenAI text embeddings (text-embedding-3-small by default).
@@ -162,13 +217,21 @@ class SentenceTransformerTextEmbedder(BaseTextEmbedder):
     Usage:
         embedder = SentenceTransformerTextEmbedder()
         embedder = SentenceTransformerTextEmbedder(model="all-mpnet-base-v2")
+        embedder = SentenceTransformerTextEmbedder(device="cuda")   # force GPU
 
     pip install sentence-transformers
     """
 
-    def __init__(self, model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model: str = "all-MiniLM-L6-v2", device: str = "auto"):
         self.model_name = model
+        self._requested_device = device
+        self.device: Optional[str] = None   # resolved lazily -- see _resolve_device()
         self._model = None
+
+    def _resolve_device(self) -> str:
+        if self.device is None:
+            self.device = resolve_device(self._requested_device)
+        return self.device
 
     def embed(self, text: str) -> list[float]:
         try:
@@ -176,8 +239,10 @@ class SentenceTransformerTextEmbedder(BaseTextEmbedder):
         except ImportError:
             raise RuntimeError("pip install sentence-transformers")
 
+        device = self._resolve_device()
+
         if self._model is None:
-            self._model = SentenceTransformer(self.model_name)
+            self._model = SentenceTransformer(self.model_name, device=device)
 
         return self._model.encode(text).tolist()
 
@@ -192,17 +257,24 @@ class CLIPImageEmbedder(BaseImageEmbedder):
     Industry standard for image embeddings.
 
     Usage:
-        embedder = CLIPImageEmbedder()
+        embedder = CLIPImageEmbedder()                        # auto device
         embedder = CLIPImageEmbedder(model="ViT-B/32")
+        embedder = CLIPImageEmbedder(device="cuda")            # explicit
 
     pip install git+https://github.com/openai/CLIP.git Pillow torch
     """
 
-    def __init__(self, model: str = "ViT-B/32", device: str = "cpu"):
+    def __init__(self, model: str = "ViT-B/32", device: str = "auto"):
         self.model_name = model
-        self.device = device
+        self._requested_device = device
+        self.device: Optional[str] = None   # resolved lazily -- see _resolve_device()
         self._model = None
         self._preprocess = None
+
+    def _resolve_device(self) -> str:
+        if self.device is None:
+            self.device = resolve_device(self._requested_device)
+        return self.device
 
     def embed(self, image_path: str) -> list[float]:
         try:
@@ -214,10 +286,13 @@ class CLIPImageEmbedder(BaseImageEmbedder):
                 "pip install git+https://github.com/openai/CLIP.git Pillow torch"
             )
 
-        if self._model is None:
-            self._model, self._preprocess = clip.load(self.model_name, device=self.device)
+        # Resolve the actual device before loading the CLIP image model
+        device = self._resolve_device()
 
-        image = self._preprocess(Image.open(image_path)).unsqueeze(0).to(self.device)
+        if self._model is None:
+            self._model, self._preprocess = clip.load(self.model_name, device=device)
+
+        image = self._preprocess(Image.open(image_path)).unsqueeze(0).to(device)
         with torch.no_grad():
             vector = self._model.encode_image(image)
         return vector.squeeze().tolist()

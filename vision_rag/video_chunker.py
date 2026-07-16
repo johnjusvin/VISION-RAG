@@ -26,11 +26,14 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from vision_rag._device import resolve_device
 
 
 # ──────────────────────────────────────────────────────────────
@@ -120,15 +123,33 @@ class WhisperLocalASR(BaseASR):
     Local Whisper model via faster-whisper (preferred) or openai-whisper (fallback).
     No API key needed. Runs entirely on your machine.
 
+    Device selection accepts "auto" (default), "cpu", or "cuda"/"cuda:N" --
+    NOT "mps": faster-whisper's ctranslate2 backend has no MPS support, and
+    this restriction is enforced uniformly across both backends so behavior
+    doesn't silently differ depending on which one happens to be installed.
+
     pip install faster-whisper
     OR
     pip install openai-whisper
     """
 
-    def __init__(self, model_size: str = "base", device: str = "cpu"):
+    # faster-whisper's ctranslate2 backend has no MPS support -- restrict
+    # both backends to the same set so behavior is consistent regardless
+    # of which one ends up being used.
+    _ALLOWED_DEVICE_KINDS = {"cpu", "cuda"}
+
+    def __init__(self, model_size: str = "base", device: str = "auto"):
         self.model_size = model_size
-        self.device = device
+        self._requested_device = device
+        self.device: Optional[str] = None   # resolved lazily -- see _resolve_device()
         self._model = None
+
+    def _resolve_device(self) -> str:
+        if self.device is None:
+            self.device = resolve_device(
+                self._requested_device, allowed=self._ALLOWED_DEVICE_KINDS
+            )
+        return self.device
 
     def transcribe(self, audio_path: str) -> list[dict]:
         try:
@@ -146,15 +167,19 @@ class WhisperLocalASR(BaseASR):
 
     def _transcribe_faster_whisper(self, audio_path: str) -> list[dict]:
         from faster_whisper import WhisperModel
+        device = self._resolve_device()
         if self._model is None:
-            self._model = WhisperModel(self.model_size, device=self.device, compute_type="int8")
+            self._model = WhisperModel(self.model_size, device=device, compute_type="int8")
         segments, _ = self._model.transcribe(audio_path, beam_size=1)
         return [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
 
     def _transcribe_openai_whisper(self, audio_path: str) -> list[dict]:
         import whisper
+        # Previously this fallback path ignored self.device entirely --
+        # whisper.load_model() silently defaulted to whatever torch picked.
+        device = self._resolve_device()
         if self._model is None:
-            self._model = whisper.load_model(self.model_size)
+            self._model = whisper.load_model(self.model_size, device=device)
         result = self._model.transcribe(audio_path)
         return [
             {"start": s["start"], "end": s["end"], "text": s["text"].strip()}
@@ -365,6 +390,28 @@ class Chunker:
 
     # ── keyframe extraction ──────────────────────────────────────
 
+    def _frame_cache_key(self, video_path: Path, start: float, end: float) -> str:
+        """
+        Build a cache key that changes whenever anything affecting the
+        extracted frame changes: the source video's identity and mtime
+        (so an edited/replaced video never returns a stale frame), the
+        exact time window (so different chunk_size/chunk_overlap settings
+        never collide, since they change which window a given chunk_id
+        covers), and the keyframe strategy.
+
+        The previous scheme keyed the cache purely on chunk_id, which
+        silently returned frames from an earlier run whenever the video,
+        chunking config, or keyframe_strategy changed but the output
+        directory was reused — a reproducibility hazard for anything
+        measured across repeated runs.
+        """
+        try:
+            mtime = video_path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        raw = f"{video_path.resolve()}|{mtime}|{start:.4f}|{end:.4f}|{self.keyframe_strategy}"
+        return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
     def _extract_keyframe(
         self,
         video_path: Path,
@@ -373,7 +420,8 @@ class Chunker:
         output_dir: Path,
         chunk_id: int,
     ) -> Optional[Path]:
-        out_path = output_dir / f"chunk_{chunk_id:04d}.jpg"
+        cache_key = self._frame_cache_key(video_path, start, end)
+        out_path = output_dir / f"chunk_{chunk_id:04d}_{cache_key}.jpg"
         if out_path.exists():
             return out_path     # use cached
 

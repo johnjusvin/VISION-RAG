@@ -119,6 +119,22 @@ class FAISS(BaseVectorStore):
         self._image_index  = None
         self._chunks: list[EmbeddedChunk] = []   # all chunks stored for lookup
 
+    @staticmethod
+    def _assert_uniform_dim(vectors: list[list[float]], kind: str) -> None:
+        """
+        Guard against silently mixing vectors from different embedders
+        (e.g. re-indexing with a different model without re-embedding
+        everything). Without this, FAISS fails with an opaque internal
+        assertion at search time instead of a clear error at index time.
+        """
+        dims = {len(v) for v in vectors}
+        if len(dims) > 1:
+            raise ValueError(
+                f"Inconsistent {kind} vector dimensions found during indexing: "
+                f"{sorted(dims)}. All chunks must be embedded with the same "
+                f"{kind} embedder before calling index()."
+            )
+
     def index(self, embedded_chunks: list[EmbeddedChunk]) -> None:
         """Index all embedded chunks into FAISS."""
         try:
@@ -135,6 +151,7 @@ class FAISS(BaseVectorStore):
             if ec.text_vector is not None
         ]
         if text_vecs:
+            self._assert_uniform_dim(text_vecs, kind="text")
             dim = len(text_vecs[0])
             self._text_index = faiss.IndexFlatIP(dim)   # Inner Product = cosine on normalized vecs
             matrix = np.array(text_vecs, dtype="float32")
@@ -148,6 +165,7 @@ class FAISS(BaseVectorStore):
             if ec.image_vector is not None
         ]
         if image_vecs:
+            self._assert_uniform_dim(image_vecs, kind="image")
             dim = len(image_vecs[0])
             self._image_index = faiss.IndexFlatIP(dim)
             matrix = np.array(image_vecs, dtype="float32")
@@ -159,6 +177,13 @@ class FAISS(BaseVectorStore):
         """Search by text vector. Returns top_k most similar chunks."""
         if self._text_index is None:
             raise RuntimeError("No text index found. Run index() first.")
+        if len(query_vector) != self._text_index.d:
+            raise ValueError(
+                f"Query vector dimension ({len(query_vector)}) does not match "
+                f"the indexed text vector dimension ({self._text_index.d}). "
+                "Make sure you're querying with the same text embedder used "
+                "at indexing time."
+            )
         import faiss
         import numpy as np
 
@@ -178,6 +203,13 @@ class FAISS(BaseVectorStore):
         """Search by image vector. Returns top_k most similar chunks."""
         if self._image_index is None:
             raise RuntimeError("No image index found. Run index() first.")
+        if len(query_vector) != self._image_index.d:
+            raise ValueError(
+                f"Query vector dimension ({len(query_vector)}) does not match "
+                f"the indexed image vector dimension ({self._image_index.d}). "
+                "Make sure you're querying with the same image embedder used "
+                "at indexing time."
+            )
         import faiss
         import numpy as np
 
@@ -281,8 +313,18 @@ class Chroma(BaseVectorStore):
         client = self._get_client()
         self._chunks = embedded_chunks
 
-        self._text_col  = client.get_or_create_collection("text_vectors")
-        self._image_col = client.get_or_create_collection("image_vectors")
+        # hnsw:space="cosine" is required here: Chroma's default distance
+        # space is squared L2, under which `1 - distance` (used below) is
+        # not a valid similarity score. Pinning to cosine also keeps scores
+        # on the same scale as FAISS, which uses inner product on
+        # L2-normalized vectors (equivalent to cosine similarity) — so the
+        # two backends now produce comparable scores for the same embeddings.
+        self._text_col  = client.get_or_create_collection(
+            "text_vectors", metadata={"hnsw:space": "cosine"}
+        )
+        self._image_col = client.get_or_create_collection(
+            "image_vectors", metadata={"hnsw:space": "cosine"}
+        )
 
         # -- text --
         text_ids, text_vecs, text_metas = [], [], []
@@ -332,21 +374,27 @@ class Chroma(BaseVectorStore):
                 None
             )
             if chunk:
-                score = 1 - results["distances"][0][i]   # chroma returns distance, convert to similarity
+                # valid because the collection is created with hnsw:space="cosine":
+                # cosine distance = 1 - cosine similarity
+                score = 1 - results["distances"][0][i]
                 out.append(SearchResult(chunk=chunk, score=score))
         return out
 
     def search_text(self, query_vector: list[float], top_k: int = 5) -> list[SearchResult]:
         if self._text_col is None:
             client = self._get_client()
-            self._text_col = client.get_or_create_collection("text_vectors")
+            self._text_col = client.get_or_create_collection(
+                "text_vectors", metadata={"hnsw:space": "cosine"}
+            )
         results = self._text_col.query(query_embeddings=[query_vector], n_results=top_k)
         return self._results_to_search(results)
 
     def search_image(self, query_vector: list[float], top_k: int = 5) -> list[SearchResult]:
         if self._image_col is None:
             client = self._get_client()
-            self._image_col = client.get_or_create_collection("image_vectors")
+            self._image_col = client.get_or_create_collection(
+                "image_vectors", metadata={"hnsw:space": "cosine"}
+            )
         results = self._image_col.query(query_embeddings=[query_vector], n_results=top_k)
         return self._results_to_search(results)
 
