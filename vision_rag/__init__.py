@@ -14,7 +14,7 @@ from vision_rag.generator import (
     OpenAIGenerator, AnthropicGenerator, GeminiGenerator, OllamaGenerator,
 )
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __all__ = [
     # Stage 1
     "VideoLoader", "VideoDocument",
