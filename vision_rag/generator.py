@@ -105,11 +105,27 @@ class BaseGenerator:
 
     def _build_system_prompt(self) -> str:
         return (
-            "You are a video understanding assistant. "
-            "You are given retrieved chunks from a video — each chunk has a transcript segment "
-            "and a keyframe image from that moment in the video. "
-            "Use both the text and visual information to answer the user's question accurately. "
-            "If the answer is not in the provided chunks, say so clearly."
+            "You are a Retrieval-Augmented Generation (RAG) assistant for video "
+            "understanding. The chunks provided below are your ONLY knowledge "
+            "source -- do not use outside knowledge about shows, people, places, "
+            "or events, even if you recognize them.\n\n"
+            "Each chunk covers a short time window and includes:\n"
+            "  - a TRANSCRIPT segment: what was said, from automatic speech recognition\n"
+            "  - a KEYFRAME image: what was visible on screen at that moment, which may "
+            "itself contain burned-in captions matching the transcript -- that overlap "
+            "is expected, not a discrepancy worth noting.\n\n"
+            "Rules:\n"
+            "1. Use the TRANSCRIPT for what was said, discussed, named, or explained.\n"
+            "2. Use the KEYFRAME only for what is visibly shown (people, setting, "
+            "on-screen text) -- never as a substitute for the transcript.\n"
+            "3. Never state a detail (in text or image) that is not clearly supported "
+            "by the provided chunks. Do not guess, complete missing information, or "
+            "identify shows/people/places unless explicitly stated or clearly visible.\n"
+            "4. Chunks are ordered chronologically below; synthesize across all of "
+            "them rather than relying on just one.\n"
+            "5. If the provided chunks do not contain enough information to answer, "
+            "say so directly instead of speculating.\n"
+            "6. When possible, cite the timestamp(s) (in seconds) your answer draws on."
         )
 
 
@@ -355,6 +371,10 @@ class Generator:
     top_k : int
         How many chunks to pass to the LLM. Default = 5.
         Uses results.all (combined text + image, ranked by score).
+    chronological : bool
+        If True (default), the top_k chunks are selected by relevance but
+        then reordered by timestamp before being sent to the LLM, so it
+        reads a coherent timeline. Set False to preserve relevance order.
 
     Usage:
         generator = Generator(llm=OpenAIGenerator(api_key="sk-..."))
@@ -366,9 +386,10 @@ class Generator:
         print(answer.sources)
     """
 
-    def __init__(self, llm: BaseGenerator, top_k: int = 5):
-        self.llm    = llm
-        self.top_k  = top_k
+    def __init__(self, llm: BaseGenerator, top_k: int = 5, chronological: bool = True):
+        self.llm           = llm
+        self.top_k         = top_k
+        self.chronological = chronological
 
     def generate(self, query: str, results: RetrievalResult) -> GeneratorAnswer:
         """
@@ -381,8 +402,16 @@ class Generator:
         results : RetrievalResult
             Output from Retriever.retrieve().
         """
-        # take top_k chunks ranked by score
+        # select top_k chunks by relevance (RRF-fused rank)...
         top_chunks = [r.chunk for r in results.all[:self.top_k]]
+
+        # ...then reorder chronologically before generation. The model reads
+        # a coherent timeline this way instead of a relevance-ranked jumble
+        # (e.g. 40s, 8s, 32s, 0s), which is harder for it to synthesize even
+        # though relevance ranking is exactly what you want for *selecting*
+        # which chunks to include.
+        if self.chronological:
+            top_chunks = sorted(top_chunks, key=lambda c: c.start)
 
         # generate answer
         answer_text = self.llm.generate(query=query, chunks=top_chunks)

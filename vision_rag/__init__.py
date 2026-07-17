@@ -3,7 +3,7 @@ from vision_rag.video_chunker import Chunker, Chunk, BaseASR, WhisperLocalASR, O
 from vision_rag.embedding import (
     EmbeddingBuilder, EmbeddedChunk,
     BaseTextEmbedder, BaseImageEmbedder,
-    OpenAITextEmbedder, SentenceTransformerTextEmbedder,
+    OpenAITextEmbedder, SentenceTransformerTextEmbedder, CLIPTextEmbedder,
     CLIPImageEmbedder, OpenAIImageEmbedder,
 )
 from vision_rag.vectorstores import BaseVectorStore, SearchResult, FAISS, Chroma
@@ -14,7 +14,7 @@ from vision_rag.generator import (
     OpenAIGenerator, AnthropicGenerator, GeminiGenerator, OllamaGenerator,
 )
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __all__ = [
     # Stage 1
     "VideoLoader", "VideoDocument",
@@ -24,7 +24,7 @@ __all__ = [
     # Stage 3
     "EmbeddingBuilder", "EmbeddedChunk",
     "BaseTextEmbedder", "BaseImageEmbedder",
-    "OpenAITextEmbedder", "SentenceTransformerTextEmbedder",
+    "OpenAITextEmbedder", "SentenceTransformerTextEmbedder", "CLIPTextEmbedder",
     "CLIPImageEmbedder", "OpenAIImageEmbedder",
     # Stage 4
     "BaseVectorStore", "SearchResult",

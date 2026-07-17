@@ -43,20 +43,55 @@ class RetrievalResult:
     query:         str
     text_results:  list[SearchResult] = field(default_factory=list)
     image_results: list[SearchResult] = field(default_factory=list)
+    rrf_k:         int = 60   # RRF damping constant (Cormack et al., 2009)
 
     @property
     def all(self) -> list[SearchResult]:
         """
-        All results from both text and image searches,
-        combined and ranked by score (highest first).
-        Deduplicates by chunk_id — keeps the highest score per chunk.
+        All results from both text and image searches, combined into a
+        single ranking via Reciprocal Rank Fusion (RRF).
+
+        Why not just sort by raw score? Raw similarity scores from
+        different embedding models are not guaranteed to be on comparable
+        scales — e.g. a SentenceTransformer text embedder and a CLIP image
+        embedder produce similarity distributions with different shapes and
+        ranges, so interleaving and sorting them by raw score is not
+        meaningful in general. It only happens to work when text and image
+        vectors come from the same joint embedding space (e.g. Jina v4).
+
+        RRF sidesteps this by fusing the two *rankings* instead of the raw
+        scores, which only assumes each individual list is internally
+        well-ordered — a much weaker and more broadly valid assumption:
+
+            rrf(chunk) = sum over lists L containing chunk of 1 / (k + rank_in_L)
+
+        where rank_in_L is the chunk's 1-indexed position within that list.
+        Deduplicates by chunk_id. Each result's original per-modality
+        similarity score is preserved on `.score` for inspection — only the
+        ordering is determined by the fused rank.
         """
-        seen = {}
-        for result in self.text_results + self.image_results:
-            cid = result.chunk.chunk_id
-            if cid not in seen or result.score > seen[cid].score:
-                seen[cid] = result
-        return sorted(seen.values(), key=lambda r: r.score, reverse=True)
+        k = self.rrf_k
+        fused: dict[int, dict] = {}
+
+        for ranked_list in (self.text_results, self.image_results):
+            for rank, result in enumerate(ranked_list, start=1):
+                cid = result.chunk.chunk_id
+                entry = fused.setdefault(
+                    cid, {"result": result, "rrf_score": 0.0, "best_raw_score": result.score}
+                )
+                entry["rrf_score"] += 1.0 / (k + rank)
+                # keep the SearchResult carrying the higher raw score for display,
+                # and use raw score only to break exact RRF ties deterministically
+                if result.score > entry["best_raw_score"]:
+                    entry["best_raw_score"] = result.score
+                    entry["result"] = result
+
+        ordered = sorted(
+            fused.values(),
+            key=lambda e: (e["rrf_score"], e["best_raw_score"]),
+            reverse=True,
+        )
+        return [e["result"] for e in ordered]
 
     @property
     def by_time(self) -> list[SearchResult]:
