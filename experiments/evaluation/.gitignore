@@ -1,0 +1,15 @@
+.env
+.venv/
+.cache/
+__pycache__/
+*.py[cod]
+data/*.mp4
+data/*.mkv
+data/*.mov
+data/*.avi
+logs/*.log
+results/*/
+!results/paper_pilot_cuda_final_v3/
+!results/paper_pilot_cuda_final_v3/run.log
+results/**/private/
+results/**/annotation_key.csv

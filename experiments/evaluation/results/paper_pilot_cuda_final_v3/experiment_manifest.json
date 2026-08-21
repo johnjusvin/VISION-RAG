@@ -1,0 +1,178 @@
+{
+  "schema_version": "visionrag-evaluation-v1",
+  "experiment_id": "paper_pilot_cuda_final_v3",
+  "status": "complete",
+  "started_at_utc": "2026-08-21T05:22:40.615651+00:00",
+  "input_files": {
+    "videos_csv": "data/videos.csv",
+    "videos_csv_sha256": "e68082d2b58a3edad7f58024e001bff0122cd46d5c586dbb12fd91cf1fe85873",
+    "queries_csv": "data/queries.csv",
+    "queries_csv_sha256": "8fa1103cf536d5b090f13d07652029656bb950451196cffd35480050bddb79f8"
+  },
+  "video_count": 9,
+  "query_count": 45,
+  "runs": 3,
+  "seed": 20260820,
+  "configurations": [
+    {
+      "config_id": "full_rrf_chrono",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Main text+image pipeline with RRF and chronological generation."
+    },
+    {
+      "config_id": "text_only",
+      "use_text": true,
+      "use_image": false,
+      "fusion": "single",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Transcript-modality retrieval baseline."
+    },
+    {
+      "config_id": "image_only",
+      "use_text": false,
+      "use_image": true,
+      "fusion": "single",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Keyframe-modality retrieval baseline."
+    },
+    {
+      "config_id": "raw_score_fusion",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "raw_score",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Naive cross-modal raw-score sorting ablation."
+    },
+    {
+      "config_id": "rrf_relevance_order",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": false,
+      "whisper_model": "base",
+      "purpose": "RRF retrieval with relevance-ordered generation context."
+    },
+    {
+      "config_id": "whisper_medium",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": true,
+      "whisper_model": "medium",
+      "purpose": "Whisper-medium ASR granularity and latency ablation."
+    }
+  ],
+  "video_assets": [
+    {
+      "video_id": "vid_001",
+      "path": "data/vid_001.mp4",
+      "size_bytes": 7076814,
+      "sha256": "0fa461ef266fdc5ae2863318e0d3174ad3da9dc6d3710b170f29124a4e1fe27b"
+    },
+    {
+      "video_id": "vid_002",
+      "path": "data/vid_002.mp4",
+      "size_bytes": 8643789,
+      "sha256": "3fb126bb7b986c8903990fc8a4cdcc77074675baf28ec163c9042bbe6b585ac8"
+    },
+    {
+      "video_id": "vid_003",
+      "path": "data/vid_003.mp4",
+      "size_bytes": 60135616,
+      "sha256": "7c3f10f17db94a258d7c828967172fc59a1946b7ca4b9ea51bafeb7cea7631b7"
+    },
+    {
+      "video_id": "vid_004",
+      "path": "data/vid_004.mp4",
+      "size_bytes": 58583889,
+      "sha256": "603054c7a5c23c3c7c57cde7af7449d5745997d4dab36ba220b02a864bd87606"
+    },
+    {
+      "video_id": "vid_005",
+      "path": "data/vid_005.mp4",
+      "size_bytes": 106957771,
+      "sha256": "d770a2ed77c51ce2165995612332fb5a0c29212f87075225cc60547bc39ecbcc"
+    },
+    {
+      "video_id": "vid_006",
+      "path": "data/vid_006.mp4",
+      "size_bytes": 34872453,
+      "sha256": "dcd12b4535b0212026381b080ca92229fa303179bc187eab5b002f41ffad12ec"
+    },
+    {
+      "video_id": "vid_007",
+      "path": "data/vid_007.mp4",
+      "size_bytes": 21390045,
+      "sha256": "8c7c63e408c8803c7d22ebd1f9bf0fbd42ca6cb7ebf3fdc073e6aeeb36822597"
+    },
+    {
+      "video_id": "vid_008",
+      "path": "data/vid_008.mp4",
+      "size_bytes": 11081322,
+      "sha256": "6de3134b65b4aefdb40815c80fa0e6fd355928d4d4efbd43000b0da335336d18"
+    },
+    {
+      "video_id": "vid_009",
+      "path": "data/vid_009.mp4",
+      "size_bytes": 338365267,
+      "sha256": "d2da21ece9b2ab36e5c2b316bd9b5a749f6ab6cdfd4d0a79162055c218ad8c77"
+    }
+  ],
+  "finished_at_utc": "2026-08-21T07:15:05.503725+00:00",
+  "outputs": [
+    "annotation/README.txt",
+    "annotation/annotation_packet.csv",
+    "annotation/answer_annotations.csv",
+    "answers.csv",
+    "chunks.csv",
+    "configuration_results.csv",
+    "costs.csv",
+    "environment.json",
+    "errors.csv",
+    "ground_truth_intervals.csv",
+    "latency_results.csv",
+    "normalized_queries.csv",
+    "normalized_videos.csv",
+    "prompt/message_template.txt",
+    "prompt/system_prompt.txt",
+    "query_metrics.csv",
+    "report.md",
+    "retrieval_results.csv",
+    "run.log",
+    "timings.csv"
+  ],
+  "output_sha256": {
+    "annotation/README.txt": "f3ccae45312062987510687cec421b6a6b31651ec9672dc56da7ecc8f22a2ebe",
+    "annotation/annotation_packet.csv": "7253d78043516f2ed63f3b26680a02ae5c451f8a37766eb7c58113cbe9ee404d",
+    "annotation/answer_annotations.csv": "42d21e12aef818b5a11353493bc4b8f9daa34160674e590fdf85d589529d7238",
+    "answers.csv": "c661481f29f27fc579d8c5f086d88eea18b815b92a138f403fc1014bab3ee9f1",
+    "chunks.csv": "fafb39c19e033be68405cd555de4d05741fb68f04bcd6662789fe7b1d1f9e692",
+    "configuration_results.csv": "4e18329b6fa1b1f4d49a5eb61e61716b95fbe2cc6e7a4ba9c6543cc2e16ebeb4",
+    "costs.csv": "572ee74a558f774e32bef1c7f8f79e1d315e654dba4813bf1f89ecc08bf4eff3",
+    "environment.json": "6da20f502ebb9c9db23431c5ac84a507ef5dfd22212888b5f5756f073a81113e",
+    "errors.csv": "5f7de1292355061cb3e527c4a4d1a92e01417878b8ce3ec4763d52fb7bea9dfc",
+    "ground_truth_intervals.csv": "c32c5db1da111ab5d57556bead179d805de34ed1147ee1929e4ffa8f80c43f2f",
+    "latency_results.csv": "c1e5133fd50824fc20aad746f708db1d10db4ad3d7e85f2180cfc63922fcaf61",
+    "normalized_queries.csv": "d412e3cd1ad2918169756bd19f8034b11eb17280b0b455431de8e3461550064e",
+    "normalized_videos.csv": "c1c08895c6f87a3e187b0c423977f7c614d28c14b009e7c44d1453e4ecd6819f",
+    "prompt/message_template.txt": "a25cb8a0cc3f222a1f3a45ffec38e7adaab41e650f446637431e1a2e43b4d1b6",
+    "prompt/system_prompt.txt": "265186582a4ecbd10a00ce30237dbed1dbe671db51fcd77161ade23849ffdb57",
+    "query_metrics.csv": "5f5d68c420f8b4660560d3a0b1e44a968d3fac46d6676c04b9d515277c02b529",
+    "report.md": "f1eed44e20eb03928b102ee9933003c21309b783201f8605f0be1cc14a010d8a",
+    "retrieval_results.csv": "20496abcf4d6f841c001ef2abf89f08e529f820b2b97225afa9ef58ec3a80766",
+    "run.log": "84ed496c8147a672a87d320a8a9701d5907b2de81b7753b5b0be80c889db12f5",
+    "timings.csv": "288b8549ea89ab52ba41ec50f12157ff23dfaa1c22d39611ba4ac34d75d64e8b"
+  },
+  "artifact_copy": {
+    "kind": "portable_publication_copy",
+    "paths_sanitized": true,
+    "note": "Machine-specific absolute paths were rewritten in this copy; output hashes were recalculated after sanitization. Source video hashes are unchanged."
+  }
+}

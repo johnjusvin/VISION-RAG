@@ -1,0 +1,36 @@
+# Exact VisionRAG release evaluated in the paper.
+vision-rag==0.1.2
+
+# Core runtime dependencies used by the example
+requests
+python-dotenv
+pymediainfo
+numpy
+Pillow
+opencv-python-headless
+
+# Optional vector store backends
+faiss-cpu
+chromadb
+
+# Optional model integrations used by the library
+openai
+anthropic
+google-genai
+ollama
+sentence-transformers
+faster-whisper
+bert-score
+yt-dlp
+
+# CTranslate2 4.x (used by faster-whisper) currently requires the CUDA 12
+# cuBLAS/cuDNN ABI even when PyTorch itself was installed with CUDA 13.
+nvidia-cublas-cu12>=12,<13; platform_system == "Linux" and platform_machine == "x86_64"
+nvidia-cudnn-cu12>=9,<10; platform_system == "Linux" and platform_machine == "x86_64"
+
+# Notes:
+# - For video frame extraction and chunking, make sure ffmpeg is installed on the system.
+# - For OCR / extractor features, install Tesseract and relevant OCR dependencies if needed.
+# - If you want to use local CLIP/torch-based models, install torch separately as required.
+# - CUDA runs must include the NVIDIA wheel library directories in LD_LIBRARY_PATH;
+#   see docs/EVALUATION.md for the complete command.

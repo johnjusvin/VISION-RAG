@@ -1,0 +1,1 @@
+Use at least two independent annotators. Copy one row per answer_id into answer_annotations.csv. Score correctness, groundedness, completeness, and relevance from 0 to 2; hallucination and refusal from 0 to 1. Do not provide private/annotation_key.csv to annotators.

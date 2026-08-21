@@ -1,0 +1,201 @@
+{
+  "schema_version": "visionrag-evaluation-v1",
+  "captured_at_utc": "2026-08-21T05:23:10.794161+00:00",
+  "hardware": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i7-13700HX",
+    "logical_cores": 24,
+    "ram_bytes": 16456937472,
+    "accelerator": {
+      "nvidia_smi": [
+        "NVIDIA GeForce RTX 5060 Laptop GPU, 8151 MiB, 590.48.01"
+      ],
+      "torch_cuda_version": "13.0",
+      "cuda_available": true,
+      "mps_available": false,
+      "torch_cuda_devices": [
+        "NVIDIA GeForce RTX 5060 Laptop GPU"
+      ]
+    }
+  },
+  "operating_system": {
+    "platform": "Linux-6.17.0-40-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64"
+  },
+  "python": {
+    "version": "3.12.3",
+    "executable": ".venv/bin/python"
+  },
+  "visionrag": {
+    "package_version": "0.1.2",
+    "git_commit": "b211636b9bee189c7b29a07027c7513b08707074"
+  },
+  "packages": {
+    "vision-rag": "0.1.2",
+    "torch": "2.13.0",
+    "sentence-transformers": "5.7.0",
+    "faiss-cpu": "1.15.0",
+    "faster-whisper": "1.2.1",
+    "ctranslate2": "4.8.1",
+    "ollama": "0.6.2",
+    "bert-score": "0.3.13",
+    "numpy": "2.5.2",
+    "pymediainfo": "7.0.1"
+  },
+  "models": {
+    "embedding": {
+      "provider": "local-clip",
+      "model": "clip-ViT-B-32",
+      "device": "cuda",
+      "joint_space": true
+    },
+    "generator": {
+      "model": "llava:7b",
+      "modified_at": "2026-02-05T02:49:22.299061+05:30",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "llama",
+        "families": [
+          "llama",
+          "clip"
+        ],
+        "parameter_size": "7B",
+        "quantization_level": "Q4_0"
+      }
+    },
+    "asr_models": [
+      "base",
+      "medium"
+    ],
+    "gpu_memory_policy": "Share one CLIP model instance; for CUDA whisper-medium, unload Ollama before ASR and release Whisper before embedding/generation."
+  },
+  "system_tools": {
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+    "ffprobe": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+  },
+  "chunking": {
+    "chunk_size": 5.0,
+    "chunk_overlap": 1.0,
+    "keyframe_strategy": "middle"
+  },
+  "retrieval": {
+    "top_k_per_modality": 10,
+    "final_top_k": 10,
+    "rrf_k": 60,
+    "minimum_interval_overlap_seconds": 0.5,
+    "metric_definition": "Query-level evidence hit: a retrieved chunk is relevant when its overlap with any annotated interval meets the threshold. Recall@K is the fraction of queries with at least one relevant chunk in the top K; MRR is truncated at final_top_k (MRR@10 by default)."
+  },
+  "generation": {
+    "source_top_k": 5,
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "host": "http://localhost:11434",
+    "retries": 3,
+    "retry_delay_seconds": 2.0
+  },
+  "bertscore": {
+    "enabled": true,
+    "model_type": "roberta-large",
+    "device": "cuda",
+    "batch_size": 8,
+    "language": "en"
+  },
+  "arguments": {
+    "videos": "data/videos.csv",
+    "queries": "data/queries.csv",
+    "relevant_intervals": "data/relevant_intervals.csv",
+    "output_dir": "results",
+    "experiment_id": "paper_pilot_cuda_final_v3",
+    "frames_cache_dir": "frames",
+    "configs": "all",
+    "runs": 3,
+    "seed": 20260820,
+    "expected_videos": 9,
+    "expected_queries": 45,
+    "embedder": "local-clip",
+    "embedding_device": "cuda",
+    "asr_device": "cuda",
+    "generator_model": "llava:7b",
+    "ollama_host": "http://localhost:11434",
+    "skip_generation": false,
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "generation_retries": 3,
+    "generation_retry_delay": 2.0,
+    "chunk_size": 5.0,
+    "chunk_overlap": 1.0,
+    "keyframe_strategy": "middle",
+    "top_k_per_modality": 10,
+    "final_top_k": 10,
+    "generation_top_k": 5,
+    "rrf_k": 60,
+    "minimum_overlap": 0.5,
+    "compute_bertscore": true,
+    "bertscore_device": "cuda",
+    "bertscore_model": "roberta-large",
+    "bertscore_batch_size": 8,
+    "allow_runtime_failures": false,
+    "allow_missing_as_failure": false,
+    "validate_only": false,
+    "preflight_only": false,
+    "skip_video_hashes": false
+  },
+  "random_seed": 20260820,
+  "repetitions": 3,
+  "configurations": [
+    {
+      "config_id": "full_rrf_chrono",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Main text+image pipeline with RRF and chronological generation."
+    },
+    {
+      "config_id": "text_only",
+      "use_text": true,
+      "use_image": false,
+      "fusion": "single",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Transcript-modality retrieval baseline."
+    },
+    {
+      "config_id": "image_only",
+      "use_text": false,
+      "use_image": true,
+      "fusion": "single",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Keyframe-modality retrieval baseline."
+    },
+    {
+      "config_id": "raw_score_fusion",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "raw_score",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Naive cross-modal raw-score sorting ablation."
+    },
+    {
+      "config_id": "rrf_relevance_order",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": false,
+      "whisper_model": "base",
+      "purpose": "RRF retrieval with relevance-ordered generation context."
+    },
+    {
+      "config_id": "whisper_medium",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": true,
+      "whisper_model": "medium",
+      "purpose": "Whisper-medium ASR granularity and latency ablation."
+    }
+  ]
+}
