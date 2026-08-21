@@ -13,6 +13,8 @@ six configurations, totaling 810 successful generations.
   manifest URLs without committing them to Git.
 - `scripts/test_evaluate_pipeline.py`: unit tests for metrics, fusion, output
   validation, and experiment bookkeeping.
+- `scripts/verify_paper_metrics.py`: recomputes every numerical claim in the
+  paper's evaluation table and discussion directly from the raw CSV files.
 - `data/videos.csv`: video manifest, source URLs, and local filename mapping.
 - `data/queries.csv`: questions, reference answers, and ground-truth intervals.
 - `results/paper_pilot_cuda_final_v3/`: raw and aggregate evidence used by the
@@ -63,6 +65,7 @@ Run the deterministic unit tests from the repository root with:
 
 ```bash
 .venv/bin/python scripts/test_evaluate_pipeline.py
+.venv/bin/python scripts/verify_paper_metrics.py
 ```
 
 The blinded annotation packet and blank scoring template are included under
