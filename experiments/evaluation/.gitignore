@@ -12,5 +12,6 @@ results/*/
 !results/paper_pilot_cuda_final_v3/
 !results/paper_pilot_cuda_final_v3/run.log
 !results/multivideo_distractor_v1/
+!results/multivideo_distractor_v1_metric_audit/
 results/**/private/
 results/**/annotation_key.csv

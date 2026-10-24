@@ -51,11 +51,39 @@ class MetricTests(unittest.TestCase):
             for index in range(10)
         ]
         query = {"intervals": [(35.0, 40.0)]}
-        metrics = evaluation.retrieval_metrics(ranked, query, 0.5)
+        metrics = evaluation.retrieval_metrics(
+            ranked, query, 0.5, "vid_001", {"video.mp4": "vid_001"}
+        )
         self.assertEqual(metrics["recall_at_1"], 0.0)
         self.assertEqual(metrics["recall_at_5"], 0.0)
         self.assertEqual(metrics["recall_at_10"], 1.0)
         self.assertAlmostEqual(metrics["mrr"], 1.0 / 8.0)
+
+    def test_temporal_relevance_requires_source_video(self):
+        # Chunk 8 sits inside the annotated interval but comes from another
+        # video; timestamp overlap alone must not make it a temporal hit.
+        ranked = [
+            {"chunk": result(index, 1.0).chunk}
+            for index in range(10)
+        ]
+        query = {"intervals": [(35.0, 40.0)]}
+        wrong_video = evaluation.retrieval_metrics(
+            ranked, query, 0.5, "vid_002", {"video.mp4": "vid_001"}
+        )
+        self.assertEqual(wrong_video["recall_at_1"], 0.0)
+        self.assertEqual(wrong_video["recall_at_10"], 0.0)
+        self.assertEqual(wrong_video["mrr"], 0.0)
+        # The video-level metric still counts it: chunk video == "vid_001"
+        # is not the query video here, so video hits are also zero.
+        video = evaluation.video_level_metrics(
+            ranked, "vid_002", {"video.mp4": "vid_001"}
+        )
+        self.assertEqual(video["video_recall_at_10"], 0.0)
+        # Same video + overlapping interval -> temporal hit restored.
+        same_video = evaluation.retrieval_metrics(
+            ranked, query, 0.5, "vid_001", {"video.mp4": "vid_001"}
+        )
+        self.assertEqual(same_video["recall_at_10"], 1.0)
 
 
 class FusionTests(unittest.TestCase):
@@ -243,7 +271,8 @@ class ArtifactTests(unittest.TestCase):
             metrics.close()
             answers.close()
             rows = evaluation.aggregate_results(root, "exp")
-            self.assertEqual(len(rows), 10)
+            # overall(1) + question_type(2) + domain(2) + video(1) per run group
+            self.assertEqual(len(rows), 12)
             overall = next(
                 row for row in rows
                 if row["run_id"] == "run_01" and row["stratum_type"] == "overall"

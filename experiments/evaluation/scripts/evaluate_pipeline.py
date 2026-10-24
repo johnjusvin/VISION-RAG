@@ -57,6 +57,9 @@ LOCAL_VISION_RAG_DIRS = (
     PROJECT_ROOT / "VISION-RAG",
     PROJECT_ROOT.parent / "VISION-RAG",
 )
+VISION_RAG_DIR = next(
+    (p for p in LOCAL_VISION_RAG_DIRS if p.exists()), LOCAL_VISION_RAG_DIRS[0]
+)
 for import_path in (*LOCAL_VISION_RAG_DIRS, TESTING_DIR):
     if str(import_path) not in sys.path:
         sys.path.insert(0, str(import_path))
@@ -131,7 +134,8 @@ CONFIGURATIONS: dict[str, ExperimentConfiguration] = {
 RETRIEVAL_FIELDS = [
     "experiment_id", "run_id", "config_id", "query_id", "video_id",
     "result_list", "rank", "final_rank", "chunk_id",
-    "chunk_start_seconds", "chunk_end_seconds", "modality", "raw_score",
+    "chunk_video_id", "chunk_start_seconds", "chunk_end_seconds",
+    "modality", "raw_score",
     "text_rank", "image_rank", "text_raw_score", "image_raw_score",
     "rrf_score", "retrieved_text", "frame_path", "is_relevant",
     "matched_intervals",
@@ -152,7 +156,10 @@ ANSWER_FIELDS = [
 QUERY_METRIC_FIELDS = [
     "experiment_id", "run_id", "config_id", "query_id", "video_id",
     "domain", "question_type", "recall_at_1", "recall_at_5",
-    "recall_at_10", "mrr", "retrieval_success", "generation_success",
+    "recall_at_10", "mrr",
+    "video_recall_at_1", "video_recall_at_5", "video_recall_at_10",
+    "video_mrr",
+    "retrieval_success", "generation_success",
     "bleu1", "token_f1", "bertscore_f1", "error",
 ]
 TIMING_FIELDS = [
@@ -176,8 +183,10 @@ CONFIG_RESULT_FIELDS = [
     "experiment_id", "run_id", "config_id", "stratum_type", "stratum_value",
     "queries", "retrieval_failures",
     "generation_attempts", "generation_failures", "recall_at_1",
-    "recall_at_5", "recall_at_10", "mrr", "bleu1", "token_f1",
-    "bertscore_f1",
+    "recall_at_5", "recall_at_10", "mrr",
+    "video_recall_at_1", "video_recall_at_5", "video_recall_at_10",
+    "video_mrr",
+    "bleu1", "token_f1", "bertscore_f1",
 ]
 LATENCY_RESULT_FIELDS = [
     "experiment_id", "run_id", "config_id", "scope", "cache_state",
@@ -193,12 +202,15 @@ ANNOTATION_FIELDS = [
 class CsvSink:
     """Append-only CSV writer that flushes each row for crash visibility."""
 
-    def __init__(self, path: Path, fieldnames: Sequence[str]):
+    def __init__(self, path: Path, fieldnames: Sequence[str], append: bool = False):
         self.fieldnames = list(fieldnames)
-        self._handle = path.open("w", encoding="utf-8", newline="")
+        mode = "a" if append else "w"
+        write_header = not append or not path.exists() or path.stat().st_size == 0
+        self._handle = path.open(mode, encoding="utf-8", newline="")
         self._writer = csv.DictWriter(self._handle, fieldnames=self.fieldnames)
-        self._writer.writeheader()
-        self._handle.flush()
+        if write_header:
+            self._writer.writeheader()
+            self._handle.flush()
 
     def write(self, row: dict[str, Any]) -> None:
         self._writer.writerow({key: _csv_value(row.get(key, "")) for key in self.fieldnames})
@@ -396,6 +408,14 @@ def _identity(result: SearchResult) -> tuple[str, int]:
     return result.chunk.video_path, result.chunk.chunk_id
 
 
+def _path_to_video_id_map(videos: dict[str, dict[str, Any]]) -> dict[str, str]:
+    return {str(video["resolved_path"]): vid for vid, video in videos.items()}
+
+
+def _identity_like(chunk: EmbeddedChunk) -> tuple[str, int]:
+    return chunk.video_path, chunk.chunk_id
+
+
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"\w+", text.casefold(), flags=re.UNICODE)
 
@@ -487,7 +507,7 @@ def reciprocal_rank_fusion(
     return sorted(
         fused.values(),
         key=lambda item: (
-            item["rrf_score"], item["best_raw_score"], -item["chunk"].chunk_id
+            item["rrf_score"], item["best_raw_score"], _identity_like(item["chunk"])
         ),
         reverse=True,
     )
@@ -1005,6 +1025,7 @@ def retrieval_rows(
     image_results: Sequence[SearchResult],
     final_results: Sequence[dict[str, Any]],
     minimum_overlap: float,
+    path_to_video_id: dict[str, str],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     final_rank_by_key = {
@@ -1016,12 +1037,15 @@ def retrieval_rows(
         ("image", "image", image_results),
     ):
         for rank, result in enumerate(results, start=1):
+            same_video = (
+                path_to_video_id.get(result.chunk.video_path, "") == identifiers["video_id"]
+            )
             matches = matching_intervals(
                 result.chunk.start,
                 result.chunk.end,
                 query["intervals"],
                 minimum_overlap,
-            )
+            ) if same_video else []
             rows.append(
                 {
                     **identifiers,
@@ -1029,6 +1053,9 @@ def retrieval_rows(
                     "rank": rank,
                     "final_rank": final_rank_by_key.get(_identity(result), ""),
                     "chunk_id": result.chunk.chunk_id,
+                    "chunk_video_id": path_to_video_id.get(
+                        result.chunk.video_path, ""
+                    ),
                     "chunk_start_seconds": result.chunk.start,
                     "chunk_end_seconds": result.chunk.end,
                     "modality": modality,
@@ -1049,9 +1076,12 @@ def retrieval_rows(
     )
     for rank, item in enumerate(final_results, start=1):
         chunk = item["chunk"]
+        same_video = (
+            path_to_video_id.get(chunk.video_path, "") == identifiers["video_id"]
+        )
         matches = matching_intervals(
             chunk.start, chunk.end, query["intervals"], minimum_overlap
-        )
+        ) if same_video else []
         rows.append(
             {
                 **identifiers,
@@ -1059,6 +1089,7 @@ def retrieval_rows(
                 "rank": rank,
                 "final_rank": rank,
                 "chunk_id": chunk.chunk_id,
+                "chunk_video_id": path_to_video_id.get(chunk.video_path, ""),
                 "chunk_start_seconds": chunk.start,
                 "chunk_end_seconds": chunk.end,
                 "modality": final_modality,
@@ -1085,9 +1116,20 @@ def retrieval_metrics(
     final_results: Sequence[dict[str, Any]],
     query: dict[str, Any],
     overlap: float,
+    query_video_id: str,
+    path_to_video_id: dict[str, str],
 ) -> dict[str, float]:
+    """Temporal (joint) relevance over a shared multi-video index.
+
+    A chunk counts as a temporal hit only when it originates from the query's
+    source video *and* overlaps an annotated support interval by at least
+    ``overlap`` seconds.  Checking timestamps alone would let a chunk from an
+    unrelated video score a hit whenever its wall-clock position happened to
+    coincide with the annotated interval of the source video.
+    """
     hits = [
-        bool(
+        path_to_video_id.get(item["chunk"].video_path, "") == query_video_id
+        and bool(
             matching_intervals(
                 item["chunk"].start,
                 item["chunk"].end,
@@ -1105,6 +1147,32 @@ def retrieval_metrics(
         "recall_at_5": float(any(hits[:5])),
         "recall_at_10": float(any(hits[:10])),
         "mrr": reciprocal_rank,
+    }
+
+
+def video_level_metrics(
+    final_results: Sequence[dict[str, Any]],
+    query_video_id: str,
+    path_to_video_id: dict[str, str],
+) -> dict[str, float]:
+    """Video-level retrieval metrics for a shared multi-video corpus.
+
+    A hit at rank r means the chunk at rank r originates from the query's
+    source video.  Video Recall@K is 1 if any of the top-K chunks comes from
+    the correct video; Video MRR is 1/rank of the first correct-video chunk.
+    """
+    hits = [
+        path_to_video_id.get(item["chunk"].video_path, "") == query_video_id
+        for item in final_results
+    ]
+    reciprocal_rank = next(
+        (1.0 / rank for rank, hit in enumerate(hits, start=1) if hit), 0.0
+    )
+    return {
+        "video_recall_at_1": float(any(hits[:1])),
+        "video_recall_at_5": float(any(hits[:5])),
+        "video_recall_at_10": float(any(hits[:10])),
+        "video_mrr": reciprocal_rank,
     }
 
 
@@ -1264,8 +1332,8 @@ def validate_runtime(
         if missing_libraries:
             raise EvaluationConfigError(
                 "CUDA ASR cannot load " + ", ".join(missing_libraries) + ". "
-                "Install the CUDA 12 wheels from requirements.txt and set "
-                "LD_LIBRARY_PATH as documented in docs/EVALUATION.md."
+                "Install the CUDA 12 wheels from testing/requirements.txt and "
+                "set LD_LIBRARY_PATH as documented in testing/EVALUATION.md."
             )
 
     if args.compute_bertscore:
@@ -1634,6 +1702,10 @@ def aggregate_results(output_dir: Path, experiment_id: str) -> list[dict[str, An
             strata.append(
                 ("domain", domain, [row for row in rows if row["domain"] == domain])
             )
+        for vid in sorted({row["video_id"] for row in rows}):
+            strata.append(
+                ("video", vid, [row for row in rows if row["video_id"] == vid])
+            )
         for stratum_type, stratum_value, stratum_rows in strata:
             answers = [
                 answers_by_key[
@@ -1670,6 +1742,10 @@ def aggregate_results(output_dir: Path, experiment_id: str) -> list[dict[str, An
                 "recall_at_5": _mean_csv(stratum_rows, "recall_at_5"),
                 "recall_at_10": _mean_csv(stratum_rows, "recall_at_10"),
                 "mrr": _mean_csv(stratum_rows, "mrr"),
+                "video_recall_at_1": _mean_csv(stratum_rows, "video_recall_at_1"),
+                "video_recall_at_5": _mean_csv(stratum_rows, "video_recall_at_5"),
+                "video_recall_at_10": _mean_csv(stratum_rows, "video_recall_at_10"),
+                "video_mrr": _mean_csv(stratum_rows, "video_mrr"),
                 "bleu1": _mean_csv(answers, "bleu1"),
                 "token_f1": _mean_csv(answers, "token_f1"),
                 "bertscore_f1": _mean_csv(answers, "bertscore_f1"),
@@ -1762,8 +1838,8 @@ def write_markdown_report(
         "> Generated from the raw CSV evidence in this directory. This is a "
         "pilot evaluation, not an external benchmark.",
         "",
-        "| Run | Configuration | N | R@1 | R@5 | R@10 | MRR@10 | BLEU-1 | Token F1 | BERTScore F1 | Gen. failures |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Run | Configuration | N | R@1 | R@5 | R@10 | MRR@10 | vR@1 | vR@5 | vR@10 | vMRR | BLEU-1 | Token F1 | BERTScore F1 | Gen. failures |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in results:
         if row["stratum_type"] != "overall":
@@ -1773,7 +1849,12 @@ def write_markdown_report(
             f"{_format_metric(row['recall_at_1'])} | "
             f"{_format_metric(row['recall_at_5'])} | "
             f"{_format_metric(row['recall_at_10'])} | "
-            f"{_format_metric(row['mrr'])} | {_format_metric(row['bleu1'])} | "
+            f"{_format_metric(row['mrr'])} | "
+            f"{_format_metric(row.get('video_recall_at_1', ''))} | "
+            f"{_format_metric(row.get('video_recall_at_5', ''))} | "
+            f"{_format_metric(row.get('video_recall_at_10', ''))} | "
+            f"{_format_metric(row.get('video_mrr', ''))} | "
+            f"{_format_metric(row['bleu1'])} | "
             f"{_format_metric(row['token_f1'])} | "
             f"{_format_metric(row['bertscore_f1'])} | "
             f"{row['generation_failures']} |"
@@ -1855,11 +1936,90 @@ def _record_video_failure(
                 "recall_at_5": 0.0,
                 "recall_at_10": 0.0,
                 "mrr": 0.0,
+                "video_recall_at_1": 0.0,
+                "video_recall_at_5": 0.0,
+                "video_recall_at_10": 0.0,
+                "video_mrr": 0.0,
                 "retrieval_success": False,
                 "generation_success": "",
                 "error": description,
             }
         )
+
+
+def _purge_partial_pairs(
+    output_dir: Path, completed: set[tuple[str, str]]
+) -> set[tuple[str, str]]:
+    """Delete rows for incomplete (run_id, config_id) pairs so --resume can re-run them.
+
+    Returns the set of partial pairs that were purged.
+    """
+    metrics_path = output_dir / "query_metrics.csv"
+    if not metrics_path.exists():
+        return set()
+    counts: dict[tuple[str, str], int] = {}
+    with metrics_path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            pair = (row.get("run_id", ""), row.get("config_id", ""))
+            if all(pair):
+                counts[pair] = counts.get(pair, 0) + 1
+    if not counts:
+        return set()
+    expected = max(counts.values())
+    partial = {
+        pair for pair, count in counts.items()
+        if pair not in completed and count < expected
+    }
+    if not partial:
+        return set()
+    csv_files = [
+        "query_metrics.csv", "retrieval_results.csv", "answers.csv",
+        "chunks.csv", "timings.csv", "errors.csv", "costs.csv",
+    ]
+    for name in csv_files:
+        path = output_dir / name
+        if not path.exists():
+            continue
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = reader.fieldnames
+            kept = [
+                row for row in reader
+                if (row.get("run_id", ""), row.get("config_id", "")) not in partial
+            ]
+        if fieldnames is None:
+            continue
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(kept)
+    print(
+        f"[resume] Purged partial rows for {len(partial)} incomplete pairs: "
+        f"{sorted(partial)}"
+    )
+    return partial
+
+
+def _load_completed_pairs(output_dir: Path, expected_per_pair: int) -> set[tuple[str, str]]:
+    """Return (run_id, config_id) pairs that already finished ALL their queries.
+
+    Used with --resume to skip work that completed before an interruption.
+    Partial pairs are intentionally excluded so they are re-run in full.
+    """
+    metrics_path = output_dir / "query_metrics.csv"
+    counts: dict[tuple[str, str], int] = {}
+    if not metrics_path.exists():
+        return set()
+    with metrics_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            run_id = row.get("run_id", "")
+            config_id = row.get("config_id", "")
+            if run_id and config_id:
+                counts[(run_id, config_id)] = counts.get((run_id, config_id), 0) + 1
+    return {
+        pair for pair, count in counts.items() if count >= expected_per_pair
+    }
 
 
 def run_experiment(
@@ -1885,22 +2045,23 @@ def run_experiment(
         "vrag_%Y%m%dT%H%M%SZ"
     )
     output_dir = Path(args.output_dir).resolve() / experiment_id
-    if output_dir.exists():
+    if output_dir.exists() and not args.resume:
         raise EvaluationConfigError(
             f"Experiment directory already exists: {output_dir}. "
-            "Use a new --experiment-id."
+            "Use a new --experiment-id or pass --resume."
         )
-    output_dir.mkdir(parents=True)
-    normalize_inputs(output_dir, videos, queries)
-    prompt_dir = output_dir / "prompt"
-    prompt_dir.mkdir()
-    (prompt_dir / "system_prompt.txt").write_text(
-        BaseGenerator()._build_system_prompt() + "\n", encoding="utf-8"
-    )
-    (prompt_dir / "message_template.txt").write_text(
-        "[Chunk N | STARTs – ENDs]\nTRANSCRIPT\n\nQuestion: QUERY\n",
-        encoding="utf-8",
-    )
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True)
+        normalize_inputs(output_dir, videos, queries)
+        prompt_dir = output_dir / "prompt"
+        prompt_dir.mkdir()
+        (prompt_dir / "system_prompt.txt").write_text(
+            BaseGenerator()._build_system_prompt() + "\n", encoding="utf-8"
+        )
+        (prompt_dir / "message_template.txt").write_text(
+            "[Chunk N | STARTs – ENDs]\nTRANSCRIPT\n\nQuestion: QUERY\n",
+            encoding="utf-8",
+        )
 
     manifest_path = output_dir / "experiment_manifest.json"
     manifest = {
@@ -1956,18 +2117,29 @@ def run_experiment(
     write_environment(
         output_dir / "environment.json", args, configurations, embedder_info
     )
+    resume_completed: set[tuple[str, str]] = set()
+    if args.resume:
+        resume_completed = _load_completed_pairs(output_dir, len(queries))
+        _purge_partial_pairs(output_dir, resume_completed)
+        if resume_completed:
+            print(
+                f"[resume] Skipping {len(resume_completed)} completed "
+                f"(run, config) pairs: {sorted(resume_completed)}"
+            )
+    append_mode = bool(args.resume)
     sinks = {
-        "retrieval": CsvSink(output_dir / "retrieval_results.csv", RETRIEVAL_FIELDS),
-        "chunks": CsvSink(output_dir / "chunks.csv", CHUNK_FIELDS),
-        "answers": CsvSink(output_dir / "answers.csv", ANSWER_FIELDS),
-        "metrics": CsvSink(output_dir / "query_metrics.csv", QUERY_METRIC_FIELDS),
-        "timings": CsvSink(output_dir / "timings.csv", TIMING_FIELDS),
-        "errors": CsvSink(output_dir / "errors.csv", ERROR_FIELDS),
-        "costs": CsvSink(output_dir / "costs.csv", COST_FIELDS),
+        "retrieval": CsvSink(output_dir / "retrieval_results.csv", RETRIEVAL_FIELDS, append=append_mode),
+        "chunks": CsvSink(output_dir / "chunks.csv", CHUNK_FIELDS, append=append_mode),
+        "answers": CsvSink(output_dir / "answers.csv", ANSWER_FIELDS, append=append_mode),
+        "metrics": CsvSink(output_dir / "query_metrics.csv", QUERY_METRIC_FIELDS, append=append_mode),
+        "timings": CsvSink(output_dir / "timings.csv", TIMING_FIELDS, append=append_mode),
+        "errors": CsvSink(output_dir / "errors.csv", ERROR_FIELDS, append=append_mode),
+        "costs": CsvSink(output_dir / "costs.csv", COST_FIELDS, append=append_mode),
     }
     queries_by_video: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for query in queries:
         queries_by_video[query["video_id"]].append(query)
+    path_to_video_id = _path_to_video_id_map(videos)
     frames_cache = Path(args.frames_cache_dir).resolve()
     frames_cache.mkdir(parents=True, exist_ok=True)
 
@@ -1979,6 +2151,11 @@ def run_experiment(
             print(f"\n=== {run_id}/{args.runs} (seed={run_seed}) ===")
             for config in configurations:
                 print(f"\n--- {config.config_id} ---")
+                if (run_id, config.config_id) in resume_completed:
+                    print(
+                        f"[resume] {run_id}/{config.config_id} already complete; skipping."
+                    )
+                    continue
                 evict_medium_asr = (
                     config.use_text
                     and config.whisper_model == "medium"
@@ -2012,6 +2189,9 @@ def run_experiment(
                         generator._build_system_prompt().encode("utf-8")
                     ).hexdigest()[:16]
                 )
+                # --- Corpus preprocessing: chunk and embed ALL videos ---
+                all_configured_chunks: list[EmbeddedChunk] = []
+                skipped_video_ids: set[str] = set()
                 for video_id, video in videos.items():
                     video_path = Path(video["resolved_path"])
                     video_queries = queries_by_video.get(video_id, [])
@@ -2023,6 +2203,7 @@ def run_experiment(
                         )
                         if not args.allow_missing_as_failure:
                             raise EvaluationConfigError(description)
+                        skipped_video_ids.add(video_id)
                         continue
                     print(
                         f"[{run_id}/{config.config_id}] {video_id}: {video['title']}"
@@ -2054,6 +2235,7 @@ def run_experiment(
                             use_image=config.use_image,
                         )
                         configured_chunks = chunks_for_configuration(embedded, config)
+                        all_configured_chunks.extend(configured_chunks)
                         for chunk in configured_chunks:
                             sinks["chunks"].write(
                                 {
@@ -2078,10 +2260,6 @@ def run_experiment(
                                     "frame_cache_state": media_timing["cache_state"],
                                 }
                             )
-                        indexing_started = time.perf_counter()
-                        store = FAISS()
-                        store.index(configured_chunks)
-                        indexing_ms = _elapsed_ms(indexing_started)
                         sinks["timings"].write(
                             {
                                 "experiment_id": experiment_id,
@@ -2092,7 +2270,7 @@ def run_experiment(
                                 "scope": "video_preprocessing",
                                 **media_timing,
                                 **embedding_timing,
-                                "indexing_ms": indexing_ms,
+                                "indexing_ms": 0.0,
                                 "total_pipeline_ms": _elapsed_ms(preprocessing_started),
                                 "cache_state": media_timing["cache_state"],
                                 "success": True,
@@ -2131,8 +2309,41 @@ def run_experiment(
                                 f"Preprocessing failed for {run_id}/{config.config_id}/"
                                 f"{video_id}: {exc!r}"
                             ) from exc
+                        skipped_video_ids.add(video_id)
                         continue
 
+                # --- Build ONE shared multi-video index ---
+                indexing_started = time.perf_counter()
+                store = FAISS()
+                store.index(all_configured_chunks)
+                indexing_ms = _elapsed_ms(indexing_started)
+                print(
+                    f"[{run_id}/{config.config_id}] "
+                    f"Indexed {len(all_configured_chunks)} chunks "
+                    f"from {len(videos) - len(skipped_video_ids)} videos "
+                    f"({indexing_ms:.1f} ms)"
+                )
+                sinks["timings"].write(
+                    {
+                        "experiment_id": experiment_id,
+                        "run_id": run_id,
+                        "config_id": config.config_id,
+                        "query_id": "",
+                        "video_id": "__corpus__",
+                        "scope": "corpus_indexing",
+                        "cache_state": "not_applicable",
+                        "indexing_ms": indexing_ms,
+                        "total_pipeline_ms": indexing_ms,
+                        "success": True,
+                        "error": "",
+                    }
+                )
+
+                # --- Query loop: search the shared multi-video index ---
+                for video_id, video in videos.items():
+                    if video_id in skipped_video_ids:
+                        continue
+                    video_queries = queries_by_video.get(video_id, [])
                     for query in video_queries:
                         identifiers = {
                             "experiment_id": experiment_id,
@@ -2167,10 +2378,20 @@ def run_experiment(
                                 image_results,
                                 final_results,
                                 args.minimum_overlap,
+                                path_to_video_id,
                             ):
                                 sinks["retrieval"].write(row)
                             metrics = retrieval_metrics(
-                                final_results, query, args.minimum_overlap
+                                final_results,
+                                query,
+                                args.minimum_overlap,
+                                video_id,
+                                path_to_video_id,
+                            )
+                            metrics.update(
+                                video_level_metrics(
+                                    final_results, video_id, path_to_video_id
+                                )
                             )
                             sources = generation_sources(
                                 final_results, config, args.generation_top_k
@@ -2315,6 +2536,10 @@ def run_experiment(
                                     "recall_at_5": 0.0,
                                     "recall_at_10": 0.0,
                                     "mrr": 0.0,
+                                    "video_recall_at_1": 0.0,
+                                    "video_recall_at_5": 0.0,
+                                    "video_recall_at_10": 0.0,
+                                    "video_mrr": 0.0,
                                     "retrieval_success": False,
                                     "generation_success": "",
                                     "error": query_error,
@@ -2437,6 +2662,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-runtime-failures",
         action="store_true",
         help="Finish diagnostic runs even when preprocessing/generation rows fail.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Continue an interrupted experiment in an existing output directory. "
+            "Completed (run, config) pairs are skipped; partial pairs are purged and re-run."
+        ),
     )
     parser.add_argument(
         "--allow-missing-as-failure",
