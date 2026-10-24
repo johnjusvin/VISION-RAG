@@ -1,0 +1,171 @@
+{
+  "schema_version": "visionrag-evaluation-v1",
+  "experiment_id": "multivideo_distractor_v1",
+  "status": "complete",
+  "started_at_utc": "2026-10-24T07:36:35.955632+00:00",
+  "input_files": {
+    "videos_csv": "/home/jusvin-britto/V-RAG/evaluation/data/videos.csv",
+    "videos_csv_sha256": "e68082d2b58a3edad7f58024e001bff0122cd46d5c586dbb12fd91cf1fe85873",
+    "queries_csv": "/home/jusvin-britto/V-RAG/evaluation/data/queries.csv",
+    "queries_csv_sha256": "8fa1103cf536d5b090f13d07652029656bb950451196cffd35480050bddb79f8"
+  },
+  "video_count": 9,
+  "query_count": 45,
+  "runs": 3,
+  "seed": 20260820,
+  "configurations": [
+    {
+      "config_id": "full_rrf_chrono",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Main text+image pipeline with RRF and chronological generation."
+    },
+    {
+      "config_id": "text_only",
+      "use_text": true,
+      "use_image": false,
+      "fusion": "single",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Transcript-modality retrieval baseline."
+    },
+    {
+      "config_id": "image_only",
+      "use_text": false,
+      "use_image": true,
+      "fusion": "single",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Keyframe-modality retrieval baseline."
+    },
+    {
+      "config_id": "raw_score_fusion",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "raw_score",
+      "chronological": true,
+      "whisper_model": "base",
+      "purpose": "Naive cross-modal raw-score sorting ablation."
+    },
+    {
+      "config_id": "rrf_relevance_order",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": false,
+      "whisper_model": "base",
+      "purpose": "RRF retrieval with relevance-ordered generation context."
+    },
+    {
+      "config_id": "whisper_medium",
+      "use_text": true,
+      "use_image": true,
+      "fusion": "rrf",
+      "chronological": true,
+      "whisper_model": "medium",
+      "purpose": "Whisper-medium ASR granularity and latency ablation."
+    }
+  ],
+  "video_assets": [
+    {
+      "video_id": "vid_001",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_001.mp4",
+      "size_bytes": 7076814,
+      "sha256": "0fa461ef266fdc5ae2863318e0d3174ad3da9dc6d3710b170f29124a4e1fe27b"
+    },
+    {
+      "video_id": "vid_002",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_002.mp4",
+      "size_bytes": 8643789,
+      "sha256": "3fb126bb7b986c8903990fc8a4cdcc77074675baf28ec163c9042bbe6b585ac8"
+    },
+    {
+      "video_id": "vid_003",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_003.mp4",
+      "size_bytes": 60135616,
+      "sha256": "7c3f10f17db94a258d7c828967172fc59a1946b7ca4b9ea51bafeb7cea7631b7"
+    },
+    {
+      "video_id": "vid_004",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_004.mp4",
+      "size_bytes": 58583889,
+      "sha256": "603054c7a5c23c3c7c57cde7af7449d5745997d4dab36ba220b02a864bd87606"
+    },
+    {
+      "video_id": "vid_005",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_005.mp4",
+      "size_bytes": 106957771,
+      "sha256": "d770a2ed77c51ce2165995612332fb5a0c29212f87075225cc60547bc39ecbcc"
+    },
+    {
+      "video_id": "vid_006",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_006.mp4",
+      "size_bytes": 34872453,
+      "sha256": "dcd12b4535b0212026381b080ca92229fa303179bc187eab5b002f41ffad12ec"
+    },
+    {
+      "video_id": "vid_007",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_007.mp4",
+      "size_bytes": 21390045,
+      "sha256": "8c7c63e408c8803c7d22ebd1f9bf0fbd42ca6cb7ebf3fdc073e6aeeb36822597"
+    },
+    {
+      "video_id": "vid_008",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_008.mp4",
+      "size_bytes": 11081322,
+      "sha256": "6de3134b65b4aefdb40815c80fa0e6fd355928d4d4efbd43000b0da335336d18"
+    },
+    {
+      "video_id": "vid_009",
+      "path": "/home/jusvin-britto/V-RAG/evaluation/data/vid_009.mp4",
+      "size_bytes": 338365267,
+      "sha256": "d2da21ece9b2ab36e5c2b316bd9b5a749f6ab6cdfd4d0a79162055c218ad8c77"
+    }
+  ],
+  "finished_at_utc": "2026-10-24T08:47:33.858838+00:00",
+  "outputs": [
+    "annotation",
+    "answers.csv",
+    "chunks.csv",
+    "configuration_results.csv",
+    "costs.csv",
+    "environment.json",
+    "errors.csv",
+    "experiment_manifest.json",
+    "ground_truth_intervals.csv",
+    "latency_results.csv",
+    "normalized_queries.csv",
+    "normalized_videos.csv",
+    "private",
+    "prompt",
+    "query_metrics.csv",
+    "report.md",
+    "retrieval_results.csv",
+    "timings.csv"
+  ],
+  "output_sha256": {
+    "annotation/README.txt": "f3ccae45312062987510687cec421b6a6b31651ec9672dc56da7ecc8f22a2ebe",
+    "annotation/annotation_packet.csv": "d8944a17a8455428d1bf1f5d29ab11d31e8c325df91478c9ef1ec19302f739e1",
+    "annotation/answer_annotations.csv": "42d21e12aef818b5a11353493bc4b8f9daa34160674e590fdf85d589529d7238",
+    "answers.csv": "26bdd48388b13584afed770df5d78fbefe237aa9e5c55bb136ce7dde749c3186",
+    "chunks.csv": "c669190d613f2505c7e5bf4e1681e055ddeb36aadd49bec2bd7856f4bf333c7d",
+    "configuration_results.csv": "b9d547e4b54da802b71730d1f68114aa1b261912f96dbb0b0e10712df75b520e",
+    "costs.csv": "062fc3fa22d340496e0cfee80c0647432af792734914767198f247c813af176c",
+    "environment.json": "4ef73b23dfcecf23f88c596d5c88808c9a32543709a65d9ef1873459e0923f23",
+    "errors.csv": "5f7de1292355061cb3e527c4a4d1a92e01417878b8ce3ec4763d52fb7bea9dfc",
+    "ground_truth_intervals.csv": "c32c5db1da111ab5d57556bead179d805de34ed1147ee1929e4ffa8f80c43f2f",
+    "latency_results.csv": "39fd69edc4ae3cfcbf6ec9cace8207af95451018d520830f9e3888e45247dd33",
+    "normalized_queries.csv": "d412e3cd1ad2918169756bd19f8034b11eb17280b0b455431de8e3461550064e",
+    "normalized_videos.csv": "c1c08895c6f87a3e187b0c423977f7c614d28c14b009e7c44d1453e4ecd6819f",
+    "private/annotation_key.csv": "d1de51dea6564387b34520d90283d2ea607282f7a0536230aa7bd1ebe00b42e3",
+    "prompt/message_template.txt": "a25cb8a0cc3f222a1f3a45ffec38e7adaab41e650f446637431e1a2e43b4d1b6",
+    "prompt/system_prompt.txt": "265186582a4ecbd10a00ce30237dbed1dbe671db51fcd77161ade23849ffdb57",
+    "query_metrics.csv": "ba139e61239641cf7ed6915666d9b9b062b4ce0396a0d9359ecf909c357ae935",
+    "report.md": "0ded859ad02efee56d7ac4bacc00d93b78e38d40344c79ca9676c15b617df73f",
+    "retrieval_results.csv": "f664951bc248a4ae2be388b8e84705959a16aeb2a1426d4184f73e612999b712",
+    "timings.csv": "f4a5e47df45c837cd99d7614d8d359c707cfb9e7759f0a1207f0345e70bb2bc3"
+  }
+}
